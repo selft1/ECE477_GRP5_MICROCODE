@@ -27,45 +27,82 @@
 #include "main.h"
 
 /* USER CODE BEGIN Includes */
-
+//#include "fingerprint_scanner.h"
 /* USER CODE END Includes */
 
 
 
 /* USER CODE BEGIN Private defines */
-
-
+ int temp = 0;
+ unsigned char buffer[300];
+ int len;
 /* USER CODE END Private defines */
 
 
 
 /* USER CODE BEGIN Prototypes */
 
+void SendtoPi(int select, char string[100], int input){
+	if(select == 1){
+		sprintf(buffer,string);
+		len = strlen(buffer);
+	}else if(select == 0){
+		sprintf(buffer,"%d",input);
+		len = strlen(buffer);
+	}
+	HAL_UART_Transmit(&huart1,buffer,len,1000);
+	HAL_Delay(10);
+	sprintf(buffer,"\n\r");
+	len = strlen(buffer);
+	HAL_UART_Transmit(&huart1,buffer,len,1000);
+}
 
+void SendSnap(void){
+	 char message[300];
+	 snprintf(message,sizeof(message),"{\"MessageID\":\"SNAP\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"\",\"Method\":\"\",\"AccessGranted\":,\"ImageID\":\"\"}\n");
+	 SendtoPi(1,message,0);
+}
 
-/*
- void SendJSON_Test(int count){
- 	 char message[100];
-	 strcpy(message,"");
+void SendAccessFPS(int id){
+	 char message[300];
+	 SendSnap();
+	 snprintf(message,sizeof(message),"{\"MessageID\":\"NEW_RECORD\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"%d\",\"Method\":\"SCANNER\",\"AccessGranted\":true,\"ImageID\":\"\"}\n",id);
+	 SendtoPi(1,message,0);
+}
 
- 	if(count == 0){
- 		strcpy(message,"{\"MessageID\":\"NEW_RECORD\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"11\",\"Method\":\"Key\",\"AccessGranted\":\"FALSE\",\"ImageID\":\"\"}\n"); //NEW RECORD
- 		}
- 	if(count == 1){
- 		strcpy(message,"{\"MessageID\":\"SNAP\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"\",\"Method\":\"\",\"AccessGranted\":\"\",\"ImageID\":\"\"}\n"); 				  //SNAP
- 	}
- 	if(count == 2){
- 		strcpy(message,"{\"MessageID\":\"Granted\",\"UserID\":\"211\",\"Method\":\"Finger\"}\n"); // Granted: Finger
- 	}
- 	if(count == 3){
- 		strcpy(message,"{\"MessageID\":\"Granted\",\"UserID\":\"\",\"Method\":\"Key\"}\n"); // Granted: Key
- 	}
- 	if(count == 4){
- 		strcpy(message,"{\"MessageID\":\"Denied\",\"UserID\":\"\",\"Method\":\"Finger\"}\n"); // Denied
- 	}
- 	SendtoPi(1,message,0);
- }
- */
+void SendDeniedFPS(void){
+	 char message[300];
+	 SendSnap();
+	 snprintf(message,sizeof(message),"{\"MessageID\":\"NEW_RECORD\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"\",\"Method\":\"SCANNER\",\"AccessGranted\":false,\"ImageID\":\"\"}\n");
+	 SendtoPi(1,message,0);
+}
+
+void SendDeniedIR(void){
+	 char message[300];
+	 SendSnap();
+	 snprintf(message,sizeof(message),"{\"MessageID\":\"NEW_RECORD\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"\",\"Method\":\"\",\"AccessGranted\":false,\"ImageID\":\"\"}\n");
+	 SendtoPi(1,message,0);
+}
+
+void SendNewUserFPS(int id){
+	 char message[300];
+	 SendSnap();
+	 snprintf(message,sizeof(message),"{\"MessageID\":\"NEW_USER\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"%d\",\"Method\":\"\",\"AccessGranted\":,\"ImageID\":\"\"}\n",id);
+	 SendtoPi(1,message,0);
+}
+
+void GetUnlockDoor(void){
+	  OpenLatch();
+	  WaitLatch(5000);
+}
+
+void SendAccessKey(){
+	 char message[300];
+	 SendSnap();
+	 snprintf(message,sizeof(message),"{\"MessageID\":\"NEW_RECORD\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"\",\"Method\":\"KEY\",\"AccessGranted\":true,\"ImageID\":\"\"}\n");
+	 SendtoPi(1,message,0);
+}
+
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

@@ -27,7 +27,7 @@ Src/main.o: ../Src/main.c ../Inc/main.h \
  ../Drivers/STM32F0xx_HAL_Driver/Inc/stm32f0xx_hal_uart.h \
  ../Drivers/STM32F0xx_HAL_Driver/Inc/stm32f0xx_hal_uart_ex.h ../Inc/adc.h \
  ../Inc/main.h ../Inc/usart.h ../Inc/gpio.h ../Inc/fingerprint_scanner.h \
- ../Inc/ir_sensor.h ../Inc/raspi_coms.h
+ ../Inc/ir_sensor.h ../Inc/raspi_coms.h ../Inc/peripherals.h
 
 ../Inc/main.h:
 
@@ -98,3 +98,5 @@ Src/main.o: ../Src/main.c ../Inc/main.h \
 ../Inc/ir_sensor.h:
 
 ../Inc/raspi_coms.h:
+
+../Inc/peripherals.h:

@@ -33,6 +33,7 @@
 #include "fingerprint_scanner.h"
 #include "ir_sensor.h"
 #include "raspi_coms.h"
+#include "peripherals.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -55,59 +56,37 @@ void SendtoPi(int select, char string[100], int input);
 
 /* USER CODE BEGIN PV */
 
-//== UART 2 STUFF ==//
-char Rx_data2[100];
-char buff[12];
+//=== UART STUFF ===//
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
+char Rx_data2[100];
+char buff[12];
 char Rx_data[100];
 char old_Rx_data[100];
-int len;
-
-unsigned char buffer[300];
-//==================
-
-//== ADC STUFF ==//
-ADC_HandleTypeDef hadc;
-int image_taken = 0;
-int first_run = 0;
-int ir_cnt = 0;
-uint16_t adc_value;
-//===============
-
-//== UART STUFF ==//
-//int len;
-//char message[100];
 int counter = 0;
-//unsigned char buffer[100];
 int check = 0;
 bool returns = 0;
 
+//== ADC STUFF ==//
+ADC_HandleTypeDef hadc;
+uint16_t adc_value;
+int image_taken = 0;
+int first_run = 0;
+int ir_cnt = 0;
+
 //== FLAGS ==//
 bool no_ir_flag = false;
+bool new_user_flag = false;
+bool delete_user_flag = false;
+bool clear_users_flag = false;
+bool unlock_flag = false;
+bool intruder_flag = false;
 
-//== BUTTONS ==//
-int btn_delay = 10;
-bool reset_btn_last = false;
-int reset_delay = 0;
-bool reset_on = false;
-bool newusr_btn_last = false;
-int newusr_delay = 0;
-bool newusr_on = false;
-bool door_btn_last = false;
-int door_delay = 0;
-bool door_on = false;
-bool key_btn_last = false;
-int key_delay = 0;
-bool key_on = false;
-bool finger_last = false;
-int finger_delay = 0;
-bool finger_on = 0;
-
-
+//== TIMEOUTS ==//
 int timeout = 500000;
 int timeout2 = 1000000;
 int timeout_cnt = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -116,270 +95,36 @@ void SystemClock_Config(void);
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) // change this for recieve from both UARTs
 {
-	if(Rx_data[0] == old_Rx_data[0] && Rx_data[1] == old_Rx_data[1]){
-		check = Check_Response(Rx_data2);
-		//Rx_data2[0] = 0x0;
-	}
+	if(Rx_data[0] == old_Rx_data[0] && Rx_data[1] == old_Rx_data[1]){check = Check_Response(Rx_data2);} // MESSAGE FROM FINGERPRINT SCANNER
 	else{
-		if(Rx_data[0] == 0x03){ // delete single user
-			int del_id = 0;
-			del_id = del_id + (int)Rx_data[1];
-			//check database for user and let pi know if user doesn't exist. let pi know if completed successfully
-			SendtoFP(Delete_packet(del_id));
-		}
-		else if(Rx_data[0] == 0x04){
-			int new_id = Enroll_finger();
-			  LED_FP(1);
-			  no_ir_flag = true;
-			  while(HAL_GPIO_ReadPin(GPIOC, FINGERPRINT_SENSE_Pin) == 0 && timeout_cnt < timeout){timeout_cnt++;} // put finger on scanner
-			  if(timeout_cnt < timeout){
-				  int new_id = Enroll_finger();
-				  SendNewUserFPS(new_id);
-			  }
-			  timeout_cnt = 0;
-			  LED_FP(0);
-			  while(HAL_GPIO_ReadPin(GPIOC, FINGERPRINT_SENSE_Pin) != 0 && timeout_cnt < timeout2){timeout_cnt++;} // get finger off scanner
-			  timeout_cnt = 0;
-		}
-		else if(Rx_data[0] == 0x02) { // delete all users
-			SendtoFP(Deleteall_packet());
-		}
-		else if(Rx_data[0] == 0x01) { // unlock
-			GetUnlockDoor();
-		}
+		switch(Rx_data[0])
+		case 0x01: unlock_flag = true; break;		// unlock door
+		case 0x02: clear_users_flag = true; break;	//delete all users
+		case 0x03: delete_user_flag = true; break;	// delete a user
+		case 0x04: new_user_flag = true; break;		// create new user
 		old_Rx_data[0] = Rx_data[0];
 		old_Rx_data[1] = Rx_data[1];
-		//packet came in from rpi
-	}
+	} // MESSAGE FROM RASPBERRY PI
 
 	HAL_UART_Receive_IT (&huart2, Rx_data2, 12);
 	HAL_UART_Receive_IT (&huart1, Rx_data, 2);
 }
 
-void SendtoPi(int select, char string[100], int input){
-	if(select == 1){
-		sprintf(buffer,string);
-		len = strlen(buffer);
-	}else if(select == 0){
-		sprintf(buffer,"%d",input);
-		len = strlen(buffer);
-	}
-	HAL_UART_Transmit(&huart1,buffer,len,1000);
-	sprintf(buffer,"\n\r");
-	len = strlen(buffer);
-	HAL_UART_Transmit(&huart1,buffer,len,1000);
-}
-
-void SendSnap(void){
-	 char message[300];
-	 snprintf(message,sizeof(message),"{\"MessageID\":\"SNAP\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"\",\"Method\":\"\",\"AccessGranted\":,\"ImageID\":\"\"}\n");
-	 SendtoPi(1,message,0);
-}
-
-void SendAccessFPS(int id){
-	 char message[300];
-	 SendSnap();
-	 snprintf(message,sizeof(message),"{\"MessageID\":\"NEW_RECORD\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"%d\",\"Method\":\"SCANNER\",\"AccessGranted\":true,\"ImageID\":\"\"}\n",id);
-	 SendtoPi(1,message,0);
-}
-
-void SendDeniedFPS(void){
-	 char message[300];
-	 SendSnap();
-	 snprintf(message,sizeof(message),"{\"MessageID\":\"NEW_RECORD\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"\",\"Method\":\"SCANNER\",\"AccessGranted\":false,\"ImageID\":\"\"}\n");
-	 SendtoPi(1,message,0);
-}
-
-void SendDeniedIR(void){
-	 char message[300];
-	 SendSnap();
-	 snprintf(message,sizeof(message),"{\"MessageID\":\"NEW_RECORD\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"\",\"Method\":\"\",\"AccessGranted\":false,\"ImageID\":\"\"}\n");
-	 SendtoPi(1,message,0);
-}
-
-void SendNewUserFPS(int id){
-	 char message[300];
-	 SendSnap();
-	 snprintf(message,sizeof(message),"{\"MessageID\":\"NEW_USER\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"%d\",\"Method\":\"\",\"AccessGranted\":,\"ImageID\":\"\"}\n",id);
-	 SendtoPi(1,message,0);
-}
-
-void GetUnlockDoor(void){
-	  OpenLatch();
-	  HAL_Delay(10);
-	  CloseLatch();
-}
-
-void SendAccessKey(){
-	 char message[300];
-	 SendSnap();
-	 snprintf(message,sizeof(message),"{\"MessageID\":\"NEW_RECORD\",\"DoorID\":\"\",\"Date\":\"\",\"Time\":\"\",\"UserID\":\"\",\"Method\":\"KEY\",\"AccessGranted\":true,\"ImageID\":\"\"}\n");
-	 SendtoPi(1,message,0);
-}
-
-void OpenLatch(){
-	  HAL_GPIO_WritePin(GPIOC, SOLENOID_ENABLE_Pin, SET);
-	  //HAL_Delay(5000);
-	  HAL_GPIO_WritePin(GPIOC, SOLENOID_Pin, SET);
-}
-
-void CloseLatch(){
-	  HAL_GPIO_WritePin(GPIOC, SOLENOID_Pin, RESET);
-	  HAL_GPIO_WritePin(GPIOC, SOLENOID_ENABLE_Pin, RESET);
-}
-
-bool Debounce(int btn){
-	bool return_val = false;
-	switch(btn){
-	case 0: // reset button
-		if(HAL_GPIO_ReadPin(GPIOA, BCK_RESET_BTN_Pin) == 0 && reset_on == false){
-			if(reset_btn_last == false){
-				reset_btn_last = true;
-				reset_delay = 0;
-			}
-			else {
-				if(reset_delay == btn_delay){
-					return_val = true;
-					reset_delay = 0;
-					reset_on = true;
-				}
-				else{
-					reset_delay++;
-				}
-			}
-		}
-		else if(HAL_GPIO_ReadPin(GPIOA, BCK_RESET_BTN_Pin) != 0){
-			reset_btn_last = false;
-			reset_on = false;
-		}
-		else if(reset_on == true){
-			return_val = true;
-		}
-		break;
-	case 1: // new user button
-		if(HAL_GPIO_ReadPin(GPIOA, BCK_NEWUSER_BTN_Pin) == 0 && newusr_on == false){
-			if(newusr_btn_last == false){
-				newusr_btn_last = true;
-				newusr_delay = 0;
-			}
-			else {
-				if(newusr_delay == btn_delay){
-					return_val = true;
-					newusr_delay = 0;
-					newusr_on = true;
-				}
-				else{
-					newusr_delay++;
-				}
-			}
-		}
-		else if(HAL_GPIO_ReadPin(GPIOA, BCK_NEWUSER_BTN_Pin) != 0){
-			newusr_btn_last = false;
-			newusr_on = false;
-		}
-		else if(newusr_on == true){
-			return_val = true;
-		}
-		break;
-	case 2: // key button
-		if(HAL_GPIO_ReadPin(GPIOC, BTM_KEYUSED_BTN_Pin) == 0 && key_on == false){
-			if(key_btn_last == false){
-				key_btn_last = true;
-				key_delay = 0;
-			}
-			else {
-				if(key_delay == btn_delay){
-					return_val = true;
-					key_delay = 0;
-					key_on = true;
-				}
-				else{
-					key_delay++;
-				}
-			}
-		}
-		else if(HAL_GPIO_ReadPin(GPIOC, BTM_KEYUSED_BTN_Pin) != 0){
-			key_btn_last = false;
-			key_on = false;
-		}
-		else if(key_on == true){
-			return_val = true;
-		}
-		break;
-	case 3: // door button
-		if(HAL_GPIO_ReadPin(GPIOC, SIDE_DOOROPEN_BTN_Pin) != 0 && door_on == false){
-			if(door_btn_last == false){
-				door_btn_last = true;
-				door_delay = 0;
-			}
-			else {
-				if(door_delay == btn_delay){
-					return_val = true;
-					door_delay = 0;
-					door_on = true;
-				}
-				else{
-					door_delay++;
-				}
-			}
-		}
-		else if(HAL_GPIO_ReadPin(GPIOC, SIDE_DOOROPEN_BTN_Pin) == 0){
-			door_btn_last = false;
-			door_on = false;
-		}
-		else if(door_on == true){
-			return_val = true;
-		}
-		break;
-	case 4: // fingerprint scanner detect
-		if(HAL_GPIO_ReadPin(GPIOC, FINGERPRINT_SENSE_Pin) != 0 && finger_on == false){
-			if(finger_last == false){
-				finger_last = true;
-				finger_delay = 0;
-			}
-			else {
-				if(finger_delay == btn_delay){
-					return_val = true;
-					finger_delay = 0;
-					finger_on = true;
-				}
-				else{
-					finger_delay++;
-				}
-			}
-		}
-		else if(HAL_GPIO_ReadPin(GPIOC, FINGERPRINT_SENSE_Pin) == 0){
-			finger_last = false;
-			finger_on = false;
-		}
-		else if(finger_on == true){
-			return_val = true;
-		}
-		break;
-	}
-
-	return return_val;
-}
-
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc1)
 {
  adc_value = HAL_ADC_GetValue(hadc1);
- if(no_ir_flag == false && adc_value > 3250 && image_taken == 0 && first_run == 2){
+ if(no_ir_flag == false && adc_value > 2500 && image_taken == 0 && first_run == 2){
 	 ir_cnt++;
-
-	 //if(ir_cnt > 1000000){
-	 if(ir_cnt > 100000){
-		 SendDeniedIR();
+	 if(ir_cnt > 1000000){
+	 //if(ir_cnt > 100000){
+		 intruder_flag = true;
 		 ir_cnt = 0;
 		 image_taken = 1;
 	 }
-	 //ir_flag = 1;
  }
- else if(adc_value <= 3200 || no_ir_flag == true){
+ else if(adc_value <= 2300 || no_ir_flag == true){
 	 image_taken = 0;
 	 ir_cnt = 0;
-	 no_ir_flag = false;
-	 //ir_flag = 0;
  }
  if(first_run < 2){first_run++;}
 
@@ -437,6 +182,8 @@ int main(void)
 
   HAL_GPIO_WritePin(GPIOA, IR_RECIEVE_Pin, SET);
 
+  HAL_UART_Receive_IT (&huart2, Rx_data2, 12);
+  HAL_UART_Receive_IT (&huart1, Rx_data, 2);
   LED_FP(0);
   /* USER CODE END 2 */
 
@@ -444,7 +191,15 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if(Debounce(4)){ // IDENTIFY FINGER
+	  if(Debounce(0)){ // ===== PCB: RESET
+		  no_ir_flag = true;
+		  LED_FP(1);
+		  HAL_Delay(1000);
+		  LED_FP(0);
+		  NVIC_SystemReset();
+	  }
+
+	  if(Debounce(4)){ // ===== PCB: IDENTIFY FINGER
 		  no_ir_flag = true;
 		  LED_FP(1);
 		  int db_check;
@@ -454,32 +209,23 @@ int main(void)
 				  SendDeniedFPS();
 			  }
 			  else{ // access granted
-				  //for(int i = 0; i < id; i++){
-					//  Flash_LED();
-				  //}
 				  SendAccessFPS(id);
+				  GetUnlockDoor();
 			  }
 		  }
 		  else{SendDeniedFPS();}
-		  //LED_FP(0);
+		  LED_FP(0);
 		  while(HAL_GPIO_ReadPin(GPIOC, FINGERPRINT_SENSE_Pin) != 0 && timeout_cnt < timeout2){timeout_cnt++;} // get finger off scanner
 		  timeout_cnt = 0;
 	  }
-	  else if(Debounce(0)){ //RESET
-		  no_ir_flag = true;
-		  LED_FP(1);
-		  HAL_Delay(1000);
-		  LED_FP(0);
-		  NVIC_SystemReset();
-	  }
-	  else if(Debounce(2)){
+	  else if(Debounce(2)){ // ===== PCB: KEY USED
 		  no_ir_flag = true;
 		  SendAccessKey();
 	  }
-	  //else if(Debounce(3)){
+	  //else if(Debounce(3)){ // ===== PCB: DOOR OPEN
 		//  no_ir_flag = true;
 	  //}
-	  else if(Debounce(1)){ //MANUAL LEARN FINGER
+	  else if(Debounce(1)){ // ===== PCB: LEARN FINGER
 		  LED_FP(1);
 		  no_ir_flag = true;
 		  while(HAL_GPIO_ReadPin(GPIOC, FINGERPRINT_SENSE_Pin) == 0 && timeout_cnt < timeout){timeout_cnt++;} // put finger on scanner
@@ -492,7 +238,41 @@ int main(void)
 		  while(HAL_GPIO_ReadPin(GPIOC, FINGERPRINT_SENSE_Pin) != 0 && timeout_cnt < timeout2){timeout_cnt++;} // get finger off scanner
 		  timeout_cnt = 0;
 	  }
-	  else{ no_ir_flag = false; }
+	  else{ no_ir_flag = false;}
+
+	  if(new_user_flag){ // ======== SERVER REQUEST: NEW USER
+		  LED_FP(1);
+		  new_user_flag = false;
+		  no_ir_flag = true;
+		  // put finger on scanner
+		  if(WaitFingerPlace(timeout)){
+			  int new_id = Enroll_finger();
+			  SendNewUserFPS(new_id);
+		  }
+		  // get finger off scanner
+		  WaitFingerRemove(timeout2);
+		  LED_FP(0);
+	  }
+	  else if(clear_users_flag){ // ===== SERVER REQUEST: DELETE ALL USERS
+		  clear_users_flag = false;
+		  SendtoFP(Deleteall_packet());
+	  }
+	  else if(delete_user_flag){ // ===== SERVER REQUEST: DELETE USER BY ID
+		  delete_user_flag = false;
+		  int del_id = 0;
+		  del_id = del_id + (int)Rx_data[1];
+		  SendtoFP(Delete_packet(del_id));
+	  }
+	  else if(unlock_flag){ // ===== SERVER REQUEST: UNLOCK DOOR
+		  unlock_flag = false;
+		  GetUnlockDoor();
+	  }
+
+	  if(intruder_flag){ // ===== IR SENSOR: INTRUDER
+		  intruder_flag = false;
+		  SendDeniedIR();
+	  }
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

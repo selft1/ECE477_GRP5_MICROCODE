@@ -445,11 +445,11 @@ int Identify_finger (void){
 	id = id + ((int)responseParam[2] * 24);
 	id = id + ((int)responseParam[3] * 32);
 
-	if(id > 0){
-		for(int i = 0; i < id; i++){
-			Flash_LED();
-		}
-	}
+	//if(id > 0){
+	//	for(int i = 0; i < id; i++){
+	//		Flash_LED();
+	//	}
+	//}
 	HAL_GPIO_WritePin(GPIOA, BCK_RED_LED_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOA, BCK_GRN_LED_Pin, GPIO_PIN_RESET);
 	return id;

@@ -37,8 +37,8 @@ test.list \
 all: test.elf secondary-outputs
 
 # Tool invocations
-test.elf: $(OBJS) $(USER_OBJS) E:\Classes\477\test\STM32F051R8TX_FLASH.ld
-	arm-none-eabi-gcc -o "test.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m0 -T"E:\Classes\477\test\STM32F051R8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="test.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+test.elf: $(OBJS) $(USER_OBJS) F:\Classes\477\test\STM32F051R8TX_FLASH.ld
+	arm-none-eabi-gcc -o "test.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m0 -T"F:\Classes\477\test\STM32F051R8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="test.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
